@@ -3,8 +3,11 @@ import Layout from "../components/Layout";
 import { tutorList } from "../data/tutorList";
 import TutorCard from "../components/common/TutorCard";
 import FilterList from "../components/common/FilterList";
+import { useLocation } from "react-router-dom";
 
 const TutorList = () => {
+  const location = useLocation();
+  const tutors = location.state?.tutors || [];
   return (
     <Layout>
       <FilterList />

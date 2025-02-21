@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import heroImage from "../Assets/heroImage.jpg";
@@ -12,14 +12,19 @@ import ListItemText from "@mui/material/ListItemText";
 import Select from "@mui/material/Select";
 import Checkbox from "@mui/material/Checkbox";
 import TextField from "@mui/material/TextField";
+import ListSubheader from "@mui/material/ListSubheader";
 
 const Home = () => {
   const navigate = useNavigate();
 
   const [selectedClass, setSelectedClass] = useState("");
   const [preferredTime, setPreferredTime] = useState(null);
-  const [personName, setPersonName] = useState([]);
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [contactNumber, setContactNumber] = useState("");
+  const [subjects, setSubjects] = useState([]);
+  const [extraSubjects, setExtraSubjects] = useState([]);
+  const [userLatitude, setUserLatitude] = useState(null);
+  const [userLongitude, setUserLongitude] = useState(null);
 
   const ITEM_HEIGHT = 40;
   const ITEM_PADDING_TOP = 4;
@@ -27,42 +32,131 @@ const Home = () => {
     PaperProps: {
       style: {
         maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
-        width: 250,
+        width: 300,
       },
     },
   };
 
-  const classes = ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5"];
-  const subjects = [
-    "English",
-    "Hindi",
-    "Sanskrit",
-    "Mathematics",
-    "History",
-    "Geography",
-    "Science",
-    "General Knowledge",
-    "Physics",
-    "Chemistry",
-    "Biology",
-  ];
+  // Fetch data from API
+  const fetchData = async () => {
+    console.log("selectedClass", selectedClass);
+    try {
+      const response = await fetch(
+        `https://test.api.myytutor.com/launchPad?classId=${selectedClass}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-  const handleFindTutor = () => {
-    navigate("/TutorList", {
-      state: {
-        selectedClass,
-        preferredTime,
-        personName,
-        contactNumber,
-      },
-    });
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("API Response:", data);
+
+      setSubjects(data.subjects || []);
+      setExtraSubjects(data.extraSubjects || []);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedClass !== "") {
+      fetchData();
+    }
+  }, [selectedClass]);
+
+  useEffect(() => {
+    // Get user's location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLatitude(position.coords.latitude);
+          setUserLongitude(position.coords.longitude);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        }
+      );
+    } else {
+      console.error("Geolocation is not supported by this browser.");
+    }
+  }, []);
+
+  const handleFindTutor = async () => {
+    if (!preferredTime) {
+      alert("Please select a preferred date and time.");
+      return;
+    }
+
+    const selectedClassIds =
+      selectedClass === "0"
+        ? [0]
+        : selectedClass === "13"
+        ? [13]
+        : [parseInt(selectedClass)];
+    const selectedExtraSubjectIds = selectedSubjects.map(
+      (subject) => subject.id
+    );
+
+    const selectedStartDate = preferredTime.toISOString().split("T")[0];
+    const selectedEndDate = new Date(
+      preferredTime.getTime() + 7 * 24 * 60 * 60 * 1000
+    )
+      .toISOString()
+      .split("T")[0];
+
+    const selectedStartTime =
+      preferredTime.getHours() * 60 + preferredTime.getMinutes();
+    const selectedEndTime = selectedStartTime + 120;
+
+    const payload = {
+      selectedClassIds,
+      selectedExtraSubjectIds,
+      selectedStartDate,
+      selectedEndDate,
+      selectedStartTime,
+      selectedEndTime,
+      userLatitude,
+      userLongitude,
+      maxDistanceInKm: 100000,
+      limit: 30,
+      offset: 0,
+    };
+
+    console.log("payload", payload);
+
+    try {
+      const response = await fetch("https://test.api.myytutor.com/teachers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(data);
+      navigate("/TutorList", { state: { tutors: data } });
+    } catch (error) {
+      console.error("Error fetching tutors:", error);
+    }
   };
 
   const handleSubjectsChange = (event) => {
     const {
       target: { value },
     } = event;
-    setPersonName(typeof value === "string" ? value.split(",") : value);
+    setSelectedSubjects(typeof value === "string" ? value.split(",") : value);
   };
 
   return (
@@ -90,27 +184,50 @@ const Home = () => {
                 <MenuItem value="" disabled>
                   Select Class
                 </MenuItem>
-                {classes.map((cls) => (
-                  <MenuItem key={cls} value={cls}>
-                    {cls}
+                <MenuItem value="0">Below 1</MenuItem>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((cls) => (
+                  <MenuItem key={cls} value={cls.toString()}>
+                    Class {cls}
                   </MenuItem>
                 ))}
+                <MenuItem value="13">Above 12</MenuItem>
               </Select>
 
               <label className="mb-1 text-sm font-medium mt-3">Subjects</label>
               <Select
                 multiple
-                value={personName}
+                value={selectedSubjects}
                 onChange={handleSubjectsChange}
                 input={<OutlinedInput />}
-                renderValue={(selected) => selected.join(", ")}
+                renderValue={(selected) =>
+                  selected.map((subj) => subj.name).join(", ")
+                }
                 MenuProps={MenuProps}
                 className="text-sm"
               >
+                {/* Subjects Category */}
+                <ListSubheader>Subjects</ListSubheader>
                 {subjects.map((subject) => (
-                  <MenuItem key={subject} value={subject}>
-                    <Checkbox checked={personName.includes(subject)} />
-                    <ListItemText primary={subject} />
+                  <MenuItem key={subject.id} value={subject}>
+                    <Checkbox
+                      checked={selectedSubjects.some(
+                        (s) => s.id === subject.id
+                      )}
+                    />
+                    <ListItemText primary={subject.name} />
+                  </MenuItem>
+                ))}
+
+                {/* Extra Subjects Category */}
+                <ListSubheader>Extra Subjects</ListSubheader>
+                {extraSubjects.map((subject) => (
+                  <MenuItem key={subject.id} value={subject}>
+                    <Checkbox
+                      checked={selectedSubjects.some(
+                        (s) => s.id === subject.id
+                      )}
+                    />
+                    <ListItemText primary={subject.name} />
                   </MenuItem>
                 ))}
               </Select>
@@ -122,13 +239,12 @@ const Home = () => {
                 <DateTimePicker
                   value={preferredTime}
                   onChange={(newValue) => setPreferredTime(newValue)}
-                  renderInput={(props) => (
+                  renderInput={(params) => (
                     <TextField
-                      {...props}
+                      {...params}
                       placeholder="Select Date & Time"
                       fullWidth
                       size="small"
-                      className="mt-1"
                     />
                   )}
                 />
